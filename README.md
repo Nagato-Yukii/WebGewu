@@ -72,3 +72,9 @@
 
 - `WebRL_workspace` 重构（Phase A-E）已完成并通过本地运行回归。  
 - 仓库中历史遗留的临时/个人配置文件已清理，文档入口已统一到本 README。  
+
+---
+
+## TODO
+
+- [ ] 适配Ubuntu
