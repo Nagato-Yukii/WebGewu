@@ -1,0 +1,54 @@
+{
+    "name": "CameraClickModel",
+    "maps": [
+        {
+            "name": "map0",
+            "id": "2025d1a9-1011-47bb-8e8c-3ad613ea6631",
+            "actions": [
+                {
+                    "name": "Click",
+                    "type": "Button",
+                    "id": "3d031dbe-103a-40a7-9f1e-594bf3d2502c",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Point",
+                    "type": "Value",
+                    "id": "d857669f-d6f4-4929-a3b5-0e6be300592d",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "ca86580f-b5d5-4f0c-a95f-1b8ddef48bc0",
+                    "path": "<Pointer>/press",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Click",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "5a53776e-1e95-4369-8d6d-e26e0c86cc37",
+                    "path": "<Pointer>/position",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Point",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}

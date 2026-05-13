@@ -1,0 +1,210 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aeed03f385f6d3e4d9b6080f9bae118f, type: 3}
+  m_Name: Go2_Data
+  m_EditorClassIdentifier: 
+  robotName: Go2
+  species: 1
+  idxParams:
+  - 1
+  - 2
+  - 0
+  - 4
+  - 5
+  - 0
+  - 7
+  - 8
+  - 0
+  - 10
+  - 11
+  - 0
+  idxIsOneBased: 0
+  defaultKk: 0.9
+  fixedDeltaTime: 0.016666668
+  defaultDriveStiffness: 2000
+  defaultDriveDamping: 100
+  defaultDriveForceLimit: 300
+  defaultPhaseWeights:
+  - 1
+  - -2
+  - 1
+  bipedWalk:
+    policyModel: {fileID: 0}
+    kbParams: []
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 0
+    d0: 0
+    T1: 0
+    T2: 0
+    kk: 0
+    settleSteps: 0
+    driveStiffness: 0
+    driveDamping: 0
+    driveForceLimit: 0
+  bipedRun:
+    policyModel: {fileID: 0}
+    kbParams: []
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 0
+    d0: 0
+    T1: 0
+    T2: 0
+    kk: 0
+    settleSteps: 0
+    driveStiffness: 0
+    driveDamping: 0
+    driveForceLimit: 0
+  bipedJump:
+    policyModel: {fileID: 0}
+    kbParams: []
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 0
+    d0: 0
+    T1: 0
+    T2: 0
+    kk: 0
+    settleSteps: 0
+    driveStiffness: 0
+    driveDamping: 0
+    driveForceLimit: 0
+  quadTrot:
+    policyModel: {fileID: 5022602860645237092, guid: 1f1ded6c9db1364449332648101e08ac, type: 3}
+    kbParams:
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 15
+    d0: 30
+    T1: 30
+    T2: 30
+    kk: 0.9
+    settleSteps: 0
+    driveStiffness: 2000
+    driveDamping: 100
+    driveForceLimit: 300
+  quadBound:
+    policyModel: {fileID: 5022602860645237092, guid: 5b67ceedf04d8d7468ebb5eaab171975, type: 3}
+    kbParams:
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    - 30
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 15
+    d0: 30
+    T1: 30
+    T2: 30
+    kk: 0.9
+    settleSteps: 0
+    driveStiffness: 2000
+    driveDamping: 100
+    driveForceLimit: 300
+  quadPronk:
+    policyModel: {fileID: 5022602860645237092, guid: 74630ca29d9a31e4ca6b6577d3ac2bf7, type: 3}
+    kbParams:
+    - 5
+    - 30
+    - 60
+    - 5
+    - 30
+    - 60
+    - 5
+    - 30
+    - 60
+    - 5
+    - 30
+    - 60
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 40
+    d0: 30
+    T1: 30
+    T2: 30
+    kk: 0.9
+    settleSteps: 8
+    driveStiffness: 2000
+    driveDamping: 100
+    driveForceLimit: 300
+  wheelDrive:
+    policyModel: {fileID: 0}
+    kbParams: []
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 0
+    d0: 0
+    T1: 0
+    T2: 0
+    kk: 0
+    settleSteps: 0
+    driveStiffness: 0
+    driveDamping: 0
+    driveForceLimit: 0
+  wheelWalk:
+    policyModel: {fileID: 0}
+    kbParams: []
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 0
+    d0: 0
+    T1: 0
+    T2: 0
+    kk: 0
+    settleSteps: 0
+    driveStiffness: 0
+    driveDamping: 0
+    driveForceLimit: 0
+  wheelJump:
+    policyModel: {fileID: 0}
+    kbParams: []
+    kb1Params: []
+    kb2Params: []
+    phaseWeights: []
+    dh: 0
+    d0: 0
+    T1: 0
+    T2: 0
+    kk: 0
+    settleSteps: 0
+    driveStiffness: 0
+    driveDamping: 0
+    driveForceLimit: 0

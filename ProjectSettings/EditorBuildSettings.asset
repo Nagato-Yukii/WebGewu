@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 0
+    path: Assets/GewuMenu.unity
+    guid: 01c231832f2486246af537d70284e175
+  - enabled: 0
+    path: Assets/Playground/Playground.unity
+    guid: 3e107643c466bdf4391843d15cdbe039
+  - enabled: 0
+    path: Assets/Navigation/Scenes/Go2Navi.unity
+    guid: 5e7af4bd95ac53a4cb784a9eedf8f6f9
+  - enabled: 0
+    path: Assets/Animation/dance.unity
+    guid: 895fe775c5d53e84780b2afc56728142
+  - enabled: 0
+    path: Assets/Playground/LoongPlay.unity
+    guid: 3394b5c66c594a5a1aca526af67e9d8d
+  - enabled: 0
+    path: Assets/Imitation/G1.unity
+    guid: 9cd14df5afb94a1929d43e45c3321256
+  - enabled: 0
+    path: Assets/Ros2ForUnity/Go2/Go2Deploy.unity
+    guid: cb0e6c9b6930b791d9d8dc42ae2b0356
+  - enabled: 0
+    path: Assets/Manipulation/G1OP.unity
+    guid: 8133c023d195999439361f52847fcfc8
+  - enabled: 0
+    path: Assets/Playground/Terrain.unity
+    guid: 4c2836f96dc7e154da69bc7ac9e63fcd
+  - enabled: 0
+    path: Assets/Flower/chahua_vr.unity
+    guid: d4d42bccb34b8df4da74f9c4bfb4567e
+  - enabled: 1
+    path: Assets/WebRL_workspace/GlobalManager.unity
+    guid: ee2b349e7e0b93f4daef1275fae5b1e2
+  - enabled: 1
+    path: Assets/WebRL_workspace/WebRL_Laboratory.unity
+    guid: 1686e195a0f6c86458599ddcfecc2e43
+  - enabled: 1
+    path: Assets/WebRL_workspace/RobotHeTuRender.unity
+    guid: 51a156dd21d9e304d9233d9207ff1148
+  - enabled: 1
+    path: Assets/WebRL_workspace/WebTinkerRL.unity
+    guid: 80dae0269393ffa47b9958e4af88bf15
+  m_configObjects:
+    Unity.XR.PICO.LivePreview.Settings: {fileID: 11400000, guid: 4de7b978444ac334bbe8983c181f12a9,
+      type: 2}
+    com.unity.input.settings: {fileID: 11400000, guid: 95254fbc30b11824a8153ac344cd973b,
+      type: 2}
+    com.unity.renderstreaming.settings: {fileID: 11400000, guid: e19df6e024da3fa4fa856398eac680ce,
+      type: 2}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 02bdc4b17efef394ab241a01124d7f44,
+      type: 2}
+  m_UseUCBPForAssetBundles: 0
