@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
@@ -19,27 +18,30 @@ public class NeuralVesselAgent : Agent
     private int actionNum;
     private bool rigReady;
 
-    private readonly List<float> initialJointPositions = new List<float>();
-    private readonly List<float> initialJointVelocities = new List<float>();
-    private float[] initialDriveTargets = new float[0];
-    private Vector3 initialRootPosition;
-    private Quaternion initialRootRotation;
-    private bool hasInitialState;
+    private NeuralVesselObservationBuilder observationBuilder;
+    private NeuralVesselJointDriver jointDriver;
+    private NeuralVesselActionIntegrator actionIntegrator;
+    private NeuralVesselGaitSynthesizer gaitSynthesizer;
+    private NeuralVesselStateRestorer stateRestorer;
 
-    private int tp;
-    private int tq;
-    private int settleStepsRemaining;
-    private float uf1;
-    private float uf2;
-    private float uff;
-
-    private float[] u = new float[0];
-    private float[] ut = new float[0];
-    private float[] utt = new float[0];
-    private float[] utotal = new float[0];
+    private NeuralVesselActionIntegrator.Buffers runtimeBuffers;
+    private NeuralVesselGaitSynthesizer.PhaseState phaseState;
+    private NeuralVesselStateRestorer.Snapshot initialSnapshot;
+    /*
+    private void Awake()
+    {
+        EnsureCoreInitialized();
+    }
+    */
+    protected override void Awake()
+    {
+        base.Awake(); // 必须调用父类的 Awake，否则 ML-Agents 可能会初始化失败
+        EnsureCoreInitialized();
+    }
 
     public void MountSoul(RobotConfig newConfig, SkillConfig skill, SkillSlot slot = SkillSlot.Unknown)
     {
+        EnsureCoreInitialized();
         config = newConfig;
         currentSkill = skill;
         currentSlot = slot;
@@ -77,6 +79,7 @@ public class NeuralVesselAgent : Agent
 
     public override void Initialize()
     {
+        EnsureCoreInitialized();
         RebuildRigCache();
         CacheInitialState();
     }
@@ -94,29 +97,14 @@ public class NeuralVesselAgent : Agent
             return;
         }
 
-        var root = body.GetComponent<ArticulationBody>();
+        var root = rootBody;
         if (root == null)
         {
             return;
         }
 
-        sensor.AddObservation(body.InverseTransformDirection(Vector3.down));
-        sensor.AddObservation(body.InverseTransformDirection(root.angularVelocity));
-        sensor.AddObservation(body.InverseTransformDirection(root.velocity));
-
-        for (int i = 0; i < actionNum; i++)
-        {
-            var jointPosition = acts[i].jointPosition;
-            var jointVelocity = acts[i].jointVelocity;
-            sensor.AddObservation(jointPosition.dofCount > 0 ? jointPosition[0] : 0f);
-            sensor.AddObservation(jointVelocity.dofCount > 0 ? jointVelocity[0] : 0f);
-        }
-
         int extraObservationCount = config != null ? Mathf.Max(0, config.extraObservationCount) : 0;
-        for (int i = 0; i < extraObservationCount; i++)
-        {
-            sensor.AddObservation(0f);
-        }
+        observationBuilder.Build(body, root, acts, actionNum, extraObservationCount, sensor);
     }
 
     public override void OnActionReceived(ActionBuffers actionBuffers)
@@ -128,299 +116,60 @@ public class NeuralVesselAgent : Agent
         }
 
         ResizeBuffers();
-        Array.Clear(utotal, 0, utotal.Length);
+        float stiffness = jointDriver.ResolveDriveValue(currentSkill.driveStiffness, config.defaultDriveStiffness);
+        float damping = jointDriver.ResolveDriveValue(currentSkill.driveDamping, config.defaultDriveDamping);
+        float forceLimit = jointDriver.ResolveDriveValue(currentSkill.driveForceLimit, config.defaultDriveForceLimit);
 
-        float stiffness = ResolveDriveValue(currentSkill.driveStiffness, config.defaultDriveStiffness);
-        float damping = ResolveDriveValue(currentSkill.driveDamping, config.defaultDriveDamping);
-        float forceLimit = ResolveDriveValue(currentSkill.driveForceLimit, config.defaultDriveForceLimit);
-
-        if (settleStepsRemaining > 0)
+        if (phaseState.settleStepsRemaining > 0)
         {
-            ApplyInitialPoseTargets(stiffness, damping, forceLimit);
+            jointDriver.ApplyInitialPoseTargets(
+                acts,
+                actionNum,
+                initialSnapshot.initialDriveTargets,
+                stiffness,
+                damping,
+                forceLimit);
             return;
         }
 
-        var continuousActions = actionBuffers.ContinuousActions;
-        float kk = ResolveKk();
+        float kk = actionIntegrator.ResolveKk(currentSkill, config);
+        actionIntegrator.Integrate(
+            actionBuffers,
+            runtimeBuffers,
+            actionNum,
+            kk,
+            currentSkill.kbParams,
+            currentSkill.kb1Params,
+            currentSkill.kb2Params);
 
-        for (int i = 0; i < actionNum; i++)
-        {
-            float action = i < continuousActions.Length ? continuousActions[i] : 0f;
-            u[i] = u[i] * kk + (1f - kk) * action;
-            ut[i] += u[i];
-            utt[i] += ut[i];
+        gaitSynthesizer.ApplySpeciesGait(
+            config,
+            currentSkill,
+            currentSlot,
+            actionNum,
+            phaseState,
+            runtimeBuffers.utotal);
 
-            float kb = ResolveArrayValue(currentSkill.kbParams, i);
-            float kb1 = ResolveArrayValue(currentSkill.kb1Params, i);
-            float kb2 = ResolveArrayValue(currentSkill.kb2Params, i);
-            utotal[i] = kb * u[i] + kb1 * ut[i] + kb2 * utt[i];
-        }
-
-        ApplySpeciesGait(utotal);
-
-        for (int i = 0; i < actionNum; i++)
-        {
-            SetJointTargetDeg(acts[i], utotal[i], stiffness, damping, forceLimit);
-        }
+        jointDriver.ApplyTargets(acts, runtimeBuffers.utotal, actionNum, stiffness, damping, forceLimit);
     }
 
     private void FixedUpdate()
     {
-        if (settleStepsRemaining > 0)
+        if (gaitSynthesizer.TryTickSettle(ref phaseState))
         {
-            settleStepsRemaining--;
-            tp = 0;
-            tq = 0;
-            uf1 = 0f;
-            uf2 = 0f;
-            uff = 0f;
             return;
         }
 
-        int t1 = Mathf.Max(0, currentSkill.T1);
-        int t2 = Mathf.Max(0, currentSkill.T2);
-
-        if (t1 > 0)
-        {
-            tp++;
-            if (tp > 0 && tp <= t1)
-            {
-                float phase = (Mathf.PI * 2f * tp) / t1;
-                uf1 = (-Mathf.Cos(phase) + 1f) * 0.5f;
-                uf2 = 0f;
-            }
-            else if (tp > t1 && tp <= 2 * t1)
-            {
-                int tp0 = tp - t1;
-                float phase = (Mathf.PI * 2f * tp0) / t1;
-                uf1 = 0f;
-                uf2 = (-Mathf.Cos(phase) + 1f) * 0.5f;
-            }
-
-            if (tp >= 2 * t1)
-            {
-                tp = 0;
-            }
-        }
-        else
-        {
-            tp = 0;
-            uf1 = 0f;
-            uf2 = 0f;
-        }
-
-        if (t2 > 0)
-        {
-            tq++;
-            float phase = (Mathf.PI * 2f * tq) / t2;
-            uff = (-Mathf.Cos(phase) + 1f) * 0.5f;
-            if (tq >= t2)
-            {
-                tq = 0;
-            }
-        }
-        else
-        {
-            tq = 0;
-            uff = 0f;
-        }
+        gaitSynthesizer.AdvancePhase(ref phaseState, currentSkill);
     }
 
-    private void ApplySpeciesGait(float[] targets)
+    public override void Heuristic(in ActionBuffers actionsOut)
     {
-        switch (config.species)
+        ActionSegment<float> continuousActionsOut = actionsOut.ContinuousActions;
+        for (int i = 0; i < continuousActionsOut.Length; i++)
         {
-            case RobotSpecies.Biped:
-                ApplyBipedGait(targets);
-                break;
-            case RobotSpecies.Quadruped:
-                ApplyQuadrupedGait(targets);
-                break;
-            case RobotSpecies.LegWheeled:
-                ApplyLegWheeledGait(targets);
-                break;
+            continuousActionsOut[i] = 0f;
         }
-    }
-
-    private void ApplyBipedGait(float[] targets)
-    {
-        if (config.idxParams == null || config.idxParams.Length < 6)
-        {
-            return;
-        }
-
-        if (currentSlot == SkillSlot.BipedJump)
-        {
-            ApplyTripletOffset(0, uff, targets);
-            if (actionNum == 10 && GetLegTripletCount() >= 2)
-            {
-                CopyTripletTargets(0, 1, targets);
-            }
-            else
-            {
-                ApplyTripletOffset(1, uff, targets);
-            }
-            return;
-        }
-
-        ApplyTripletOffset(0, uf1, targets);
-        ApplyTripletOffset(1, uf2, targets);
-    }
-
-    private void ApplyQuadrupedGait(float[] targets)
-    {
-        int legCount = GetLegTripletCount();
-        if (legCount <= 0)
-        {
-            return;
-        }
-
-        if (currentSlot == SkillSlot.QuadPronk)
-        {
-            for (int leg = 0; leg < legCount; leg++)
-            {
-                ApplyTripletOffset(leg, uff, targets);
-            }
-            return;
-        }
-
-        if (currentSlot == SkillSlot.QuadBound)
-        {
-            int split = Mathf.Max(1, legCount / 2);
-            for (int leg = 0; leg < legCount; leg++)
-            {
-                ApplyTripletOffset(leg, leg < split ? uf1 : uf2, targets);
-            }
-            return;
-        }
-
-        float[] trotPattern = new float[4] { uf1, uf2, uf2, uf1 };
-        for (int leg = 0; leg < legCount; leg++)
-        {
-            float phase = trotPattern[leg % trotPattern.Length];
-            ApplyTripletOffset(leg, phase, targets);
-        }
-    }
-
-    private void ApplyLegWheeledGait(float[] targets)
-    {
-        int legCount = GetLegTripletCount();
-        if (legCount <= 0)
-        {
-            return;
-        }
-
-        if (currentSlot == SkillSlot.WheelDrive)
-        {
-            if (config.wheelDrivePoseMode == WheelDrivePoseMode.WithoutPoseOffset)
-            {
-                return;
-            }
-
-            for (int leg = 0; leg < legCount; leg++)
-            {
-                ApplyTripletOffset(leg, 0f, targets);
-            }
-            return;
-        }
-
-        if (currentSlot == SkillSlot.WheelJump)
-        {
-            for (int leg = 0; leg < legCount; leg++)
-            {
-                ApplyTripletOffset(leg, uff, targets);
-            }
-            return;
-        }
-
-        float[] walkPattern = new float[4] { uf1, uf2, uf2, uf1 };
-        for (int leg = 0; leg < legCount; leg++)
-        {
-            float phase = walkPattern[leg % walkPattern.Length];
-            ApplyTripletOffset(leg, phase, targets);
-        }
-    }
-
-    private void ApplyTripletOffset(int legOrder, float phase, float[] targets)
-    {
-        if (config.idxParams == null)
-        {
-            return;
-        }
-
-        int start = legOrder * 3;
-        if (start + 2 >= config.idxParams.Length)
-        {
-            return;
-        }
-
-        var weights = ResolvePhaseWeights();
-        if (weights == null)
-        {
-            return;
-        }
-
-        float gaitSignal = currentSkill.dh * phase + currentSkill.d0;
-        AddMappedOffset(targets, config.idxParams[start], gaitSignal * weights[0]);
-        AddMappedOffset(targets, config.idxParams[start + 1], gaitSignal * weights[1]);
-        AddMappedOffset(targets, config.idxParams[start + 2], gaitSignal * weights[2]);
-    }
-
-    private void AddMappedOffset(float[] targets, int mappedIndex, float value)
-    {
-        int jointIndex = ResolveJointIndex(mappedIndex);
-        if (jointIndex < 0 || jointIndex >= actionNum)
-        {
-            return;
-        }
-
-        targets[jointIndex] += value * ResolveJointSign(mappedIndex);
-    }
-
-    private float ResolveKk()
-    {
-        float fromSkill = currentSkill.kk;
-        float kk = fromSkill > 0f ? fromSkill : config.defaultKk;
-        return Mathf.Clamp01(kk);
-    }
-
-    private static float ResolveArrayValue(float[] values, int index)
-    {
-        if (values == null || index < 0 || index >= values.Length)
-        {
-            return 0f;
-        }
-        return values[index];
-    }
-
-    private float[] ResolvePhaseWeights()
-    {
-        if (currentSkill.phaseWeights != null && currentSkill.phaseWeights.Length >= 3)
-        {
-            return currentSkill.phaseWeights;
-        }
-
-        if (config.defaultPhaseWeights != null && config.defaultPhaseWeights.Length >= 3)
-        {
-            return config.defaultPhaseWeights;
-        }
-
-        return null;
-    }
-
-    private static float ResolveDriveValue(float fromSkill, float fromConfig)
-    {
-        return fromSkill > 0f ? fromSkill : Mathf.Max(0f, fromConfig);
-    }
-
-    private void SetJointTargetDeg(ArticulationBody joint, float targetAngle, float stiffness, float damping, float forceLimit)
-    {
-        var drive = joint.xDrive;
-        drive.stiffness = stiffness;
-        drive.damping = damping;
-        drive.forceLimit = forceLimit;
-        drive.target = targetAngle;
-        joint.xDrive = drive;
     }
 
     private void SyncBehaviorParameters(BehaviorParameters behaviorParameters)
@@ -437,70 +186,20 @@ public class NeuralVesselAgent : Agent
         }
     }
 
-    private int GetLegTripletCount()
-    {
-        return config.idxParams == null ? 0 : config.idxParams.Length / 3;
-    }
-
-    private void CopyTripletTargets(int sourceLegOrder, int targetLegOrder, float[] targets)
-    {
-        int sourceStart = sourceLegOrder * 3;
-        int targetStart = targetLegOrder * 3;
-        if (sourceStart + 2 >= config.idxParams.Length || targetStart + 2 >= config.idxParams.Length)
-        {
-            return;
-        }
-
-        for (int i = 0; i < 3; i++)
-        {
-            int sourceIndex = ResolveJointIndex(config.idxParams[sourceStart + i]);
-            int targetIndex = ResolveJointIndex(config.idxParams[targetStart + i]);
-            if (sourceIndex < 0 || targetIndex < 0 || sourceIndex >= actionNum || targetIndex >= actionNum)
-            {
-                continue;
-            }
-
-            float sourceValue = targets[sourceIndex] * ResolveJointSign(config.idxParams[sourceStart + i]);
-            targets[targetIndex] = sourceValue * ResolveJointSign(config.idxParams[targetStart + i]);
-        }
-    }
-
-    private int ResolveJointIndex(int mappedIndex)
-    {
-        if (mappedIndex == 0)
-        {
-            return -1;
-        }
-
-        int absIndex = Mathf.Abs(mappedIndex);
-        return config.idxIsOneBased ? absIndex - 1 : absIndex;
-    }
-
-    private static int ResolveJointSign(int mappedIndex)
-    {
-        return mappedIndex >= 0 ? 1 : -1;
-    }
-
     private void ResizeBuffers()
     {
-        if (u.Length == actionNum)
-        {
-            return;
-        }
-
-        u = new float[actionNum];
-        ut = new float[actionNum];
-        utt = new float[actionNum];
-        utotal = new float[actionNum];
-        initialDriveTargets = new float[actionNum];
+        runtimeBuffers = actionIntegrator.ResizeIfNeeded(runtimeBuffers, actionNum);
+        stateRestorer.EnsureDriveTargetBuffer(initialSnapshot, actionNum);
     }
 
     private void ClearBuffers()
     {
-        Array.Clear(u, 0, u.Length);
-        Array.Clear(ut, 0, ut.Length);
-        Array.Clear(utt, 0, utt.Length);
-        Array.Clear(utotal, 0, utotal.Length);
+        if (runtimeBuffers.u == null || runtimeBuffers.u.Length == 0)
+        {
+            return;
+        }
+
+        actionIntegrator.Clear(runtimeBuffers);
     }
 
     private void EnsureRigReady()
@@ -511,7 +210,7 @@ public class NeuralVesselAgent : Agent
         }
 
         RebuildRigCache();
-        if (!hasInitialState)
+        if (!initialSnapshot.hasInitialState)
         {
             CacheInitialState();
         }
@@ -550,35 +249,7 @@ public class NeuralVesselAgent : Agent
 
     private void CacheInitialState()
     {
-        if (rootBody == null)
-        {
-            hasInitialState = false;
-            return;
-        }
-
-        initialRootPosition = rootBody.transform.position;
-        initialRootRotation = rootBody.transform.rotation;
-
-        initialJointPositions.Clear();
-        initialJointVelocities.Clear();
-        rootBody.GetJointPositions(initialJointPositions);
-        rootBody.GetJointVelocities(initialJointVelocities);
-
-        for (int i = 0; i < actionNum; i++)
-        {
-            initialDriveTargets[i] = acts[i].xDrive.target;
-        }
-
-        hasInitialState = true;
-    }
-
-    private void ApplyInitialPoseTargets(float stiffness, float damping, float forceLimit)
-    {
-        for (int i = 0; i < actionNum; i++)
-        {
-            float target = i < initialDriveTargets.Length ? initialDriveTargets[i] : 0f;
-            SetJointTargetDeg(acts[i], target, stiffness, damping, forceLimit);
-        }
+        stateRestorer.CacheInitialState(initialSnapshot, rootBody, acts, actionNum);
     }
 
     private InferenceDevice ResolveInferenceDevice()
@@ -592,22 +263,29 @@ public class NeuralVesselAgent : Agent
     private void ResetRuntimeStateForCurrentSkill()
     {
         EnsureRigReady();
+        stateRestorer.RestoreRootAndJointState(initialSnapshot, rootBody);
 
-        if (hasInitialState && rootBody != null)
+        phaseState.tp = 0;
+        phaseState.tq = 0;
+        phaseState.settleStepsRemaining = Mathf.Max(0, currentSkill.settleSteps);
+        phaseState.uf1 = 0f;
+        phaseState.uf2 = 0f;
+        phaseState.uff = 0f;
+        ClearBuffers();
+    }
+
+    private void EnsureCoreInitialized()
+    {
+        if (observationBuilder != null)
         {
-            rootBody.TeleportRoot(initialRootPosition, initialRootRotation);
-            rootBody.velocity = Vector3.zero;
-            rootBody.angularVelocity = Vector3.zero;
-            rootBody.SetJointPositions(initialJointPositions);
-            rootBody.SetJointVelocities(initialJointVelocities);
+            return;
         }
 
-        tp = 0;
-        tq = 0;
-        settleStepsRemaining = Mathf.Max(0, currentSkill.settleSteps);
-        uf1 = 0f;
-        uf2 = 0f;
-        uff = 0f;
-        ClearBuffers();
+        observationBuilder = new NeuralVesselObservationBuilder();
+        jointDriver = new NeuralVesselJointDriver();
+        actionIntegrator = new NeuralVesselActionIntegrator();
+        gaitSynthesizer = new NeuralVesselGaitSynthesizer();
+        stateRestorer = new NeuralVesselStateRestorer();
+        initialSnapshot = stateRestorer.CreateSnapshot();
     }
 }
