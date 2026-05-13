@@ -1,8 +1,10 @@
 using System;
 using UnityEngine;
 
+[DisallowMultipleComponent]
 public class WorldLineDebugger : MonoBehaviour
 {
+    // Local keyboard/overlay debugger for ExperimentDirector command injection.
     [Serializable]
     private struct DebugSkillOption
     {

@@ -27,15 +27,11 @@ public class NeuralVesselAgent : Agent
     private NeuralVesselActionIntegrator.Buffers runtimeBuffers;
     private NeuralVesselGaitSynthesizer.PhaseState phaseState;
     private NeuralVesselStateRestorer.Snapshot initialSnapshot;
-    /*
-    private void Awake()
-    {
-        EnsureCoreInitialized();
-    }
-    */
+
     protected override void Awake()
     {
-        base.Awake(); // 必须调用父类的 Awake，否则 ML-Agents 可能会初始化失败
+        // Agent base Awake initializes ML-Agents internals first.
+        base.Awake();
         EnsureCoreInitialized();
     }
 

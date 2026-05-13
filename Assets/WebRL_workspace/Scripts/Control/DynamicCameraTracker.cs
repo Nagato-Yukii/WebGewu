@@ -1,7 +1,9 @@
 using UnityEngine;
 
+[DisallowMultipleComponent]
 public class DynamicCameraTracker : MonoBehaviour
 {
+    // Runtime-follow camera with optional Y lock and smooth look-at.
     [Tooltip("Current follow target.")]
     public Transform target;
 
