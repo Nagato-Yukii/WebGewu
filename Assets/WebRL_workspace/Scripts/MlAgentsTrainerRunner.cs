@@ -31,8 +31,8 @@ public class MlAgentsTrainerRunner : MonoBehaviour
             return true;
         }
 
-        string workingDirectory = Application.dataPath;
-        string resolvedConfigPath = ResolveConfigPath(workingDirectory);
+        string workingDirectory = Path.GetDirectoryName(Application.dataPath);
+        string resolvedConfigPath = ResolveConfigPath(Path.Combine(Application.dataPath, "WebRL_workspace"));
         string trainerArgs = BuildTrainerArguments(resolvedConfigPath);
 
         var startInfo = BuildStartInfo(workingDirectory, trainerArgs);
@@ -57,7 +57,9 @@ public class MlAgentsTrainerRunner : MonoBehaviour
         }
         catch (Exception ex)
         {
-            UnityEngine.Debug.LogError($"[MlAgentsTrainerRunner] Failed to start training process. {ex.Message}");
+            UnityEngine.Debug.LogError(
+                $"[MlAgentsTrainerRunner] Failed to start training process on platform={Application.platform}, " +
+                $"workingDirectory='{workingDirectory}'. {ex.GetType().Name}: {ex.Message}");
             CleanupProcessSubscriptions();
             _trainerProcess = null;
             return false;
@@ -91,7 +93,7 @@ public class MlAgentsTrainerRunner : MonoBehaviour
             }
             else
             {
-                _trainerProcess.Kill();
+                KillLinuxProcessTree(pid);
             }
 
             UnityEngine.Debug.Log($"[MlAgentsTrainerRunner] Stopped trainer process PID={pid}.");
@@ -104,6 +106,46 @@ public class MlAgentsTrainerRunner : MonoBehaviour
         {
             CleanupProcessSubscriptions();
             _trainerProcess = null;
+        }
+    }
+
+    private static void KillLinuxProcessTree(int pid)
+    {
+        RunShellCommand("/bin/bash",
+            $"-c \"kill -KILL -$(ps -o pgid= -p {pid} | tr -d ' ') 2>/dev/null; " +
+            $"pkill -KILL -P {pid} 2>/dev/null; " +
+            $"kill -KILL {pid} 2>/dev/null; true\"");
+
+        KillOrphanedTrainersByPort();
+    }
+
+    private static void KillOrphanedTrainersByPort()
+    {
+        RunShellCommand("/bin/bash",
+            "-c \"fuser -k -9 5004/tcp 2>/dev/null; " +
+            "lsof -ti :5004 | xargs -r kill -9 2>/dev/null; true\"");
+    }
+
+    private static void RunShellCommand(string fileName, string arguments)
+    {
+        try
+        {
+            Process p = new Process();
+            p.StartInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            p.Start();
+            p.WaitForExit(5000);
+            p.Dispose();
+        }
+        catch
+        {
         }
     }
 
@@ -148,6 +190,46 @@ public class MlAgentsTrainerRunner : MonoBehaviour
 
     private ProcessStartInfo BuildStartInfo(string workingDirectory, string trainerArgs)
     {
+        bool isWindows =
+            Application.platform == RuntimePlatform.WindowsEditor ||
+            Application.platform == RuntimePlatform.WindowsPlayer;
+        bool isLinux =
+            Application.platform == RuntimePlatform.LinuxEditor ||
+            Application.platform == RuntimePlatform.LinuxPlayer;
+
+        if (isLinux)
+        {
+            const string linuxPython = "/home/suzumiyaharuhi/anaconda3/envs/gewu/bin/python";
+            if (!File.Exists(linuxPython))
+            {
+                throw new FileNotFoundException(
+                    $"Linux trainer python not found: {linuxPython}. " +
+                    "Please verify the conda env path for 'gewu'.",
+                    linuxPython);
+            }
+
+            string linuxArgs = $"-m mlagents.trainers.learn {trainerArgs}";
+            UnityEngine.Debug.Log(
+                $"[MlAgentsTrainerRunner] Linux launch command: PYTHONNOUSERSITE=1 {linuxPython} {linuxArgs}");
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = linuxPython,
+                Arguments = linuxArgs,
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            startInfo.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
+            return startInfo;
+        }
+
+        if (!isWindows)
+        {
+            throw new PlatformNotSupportedException($"Unsupported platform: {Application.platform}");
+        }
+
         string condaExecutable = ResolveCondaExecutablePath();
         if (!string.IsNullOrWhiteSpace(condaExecutable))
         {
@@ -285,6 +367,29 @@ public class MlAgentsTrainerRunner : MonoBehaviour
         _trainerProcess.OutputDataReceived -= HandleOutputDataReceived;
         _trainerProcess.ErrorDataReceived -= HandleErrorDataReceived;
         _trainerProcess.Exited -= HandleTrainerExited;
+
+        try
+        {
+            if (_trainerProcess.StartInfo.RedirectStandardOutput)
+            {
+                _trainerProcess.CancelOutputRead();
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (_trainerProcess.StartInfo.RedirectStandardError)
+            {
+                _trainerProcess.CancelErrorRead();
+            }
+        }
+        catch
+        {
+        }
+
         _trainerProcess.Dispose();
     }
 }
