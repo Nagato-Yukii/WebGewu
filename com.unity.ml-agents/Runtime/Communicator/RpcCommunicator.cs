@@ -270,18 +270,21 @@ namespace Unity.MLAgents
         {
             if (!m_IsOpen)
             {
+                m_SensorShapeValidators.Clear();
                 return;
             }
 
             try
             {
                 m_Client.Exchange(WrapMessage(null, 400));
-                m_IsOpen = false;
             }
             catch
             {
                 // ignored
             }
+
+            m_IsOpen = false;
+            m_SensorShapeValidators.Clear();
         }
 
         #endregion

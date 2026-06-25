@@ -98,12 +98,18 @@ public sealed class SceneDirectorTrainingCoordinator
     public void StopWebTinkerTrainingForSceneTransition(MlAgentsTrainerRunner trainerRunner)
     {
         TinkercoinAgent.SetRequestedTrainingMode(false);
+
+        ResetMlAgentsAcademy("web tinker scene transition (pre-kill)");
+
         if (trainerRunner != null)
         {
             trainerRunner.StopTraining();
         }
 
-        ResetMlAgentsAcademy("web tinker scene transition");
+        Time.timeScale = 1f;
+        Time.fixedDeltaTime = 0.02f;
+
+        Debug.Log("[SceneDirector] Scene 3 teardown complete: Academy disposed, process tree killed, time restored.");
     }
 
     public static bool CanCurrentProcessConnectTrainer()
